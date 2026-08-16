@@ -1,4 +1,4 @@
-package com.nepalicalendar
+package com.balibabu.patro
 
 import android.app.Application
 import com.facebook.react.PackageList
