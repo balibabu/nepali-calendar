@@ -19,7 +19,6 @@ export interface GridCell {
 export const MIN_BS_YEAR = 1992;
 export const MAX_BS_YEAR = 2100;
 
-const ANCHOR_AD_UTC_MS = Date.UTC(1943, 3, 14);
 const DAY_MS = 86400000;
 
 const yearData = miti as Record<string, number[]>;
@@ -64,27 +63,20 @@ export function monthFromIndex(index: number): { year: number; month: number } {
   return { year, month: (index % 12) + 1 };
 }
 
-export function bsToAd(bs: BSDate): Date {
-  const idx = MONTH_STARTS[monthIndex(bs.year, bs.month)] + bs.day - 1;
-  return new Date(ANCHOR_AD_UTC_MS + idx * DAY_MS);
-}
+const ANCHOR_DAY_INDEX = MONTH_STARTS[monthIndex(2056, 9)] + 16;
+const ANCHOR_AD_UTC_MS = Date.UTC(2000, 0, 1);
 
-function toUTCMs(d: Date): number {
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+export function bsToAd(bs: BSDate): Date {
+  return new Date(ANCHOR_AD_UTC_MS + (dayIndex(bs) - ANCHOR_DAY_INDEX) * DAY_MS);
 }
 
 export function adToBs(ad: Date): BSDate {
   const target = Date.UTC(ad.getFullYear(), ad.getMonth(), ad.getDate());
-  if (target < ANCHOR_AD_UTC_MS) {
-    throw new Error('Date before supported range (before 1943-04-14 AD)');
+  const idx = ANCHOR_DAY_INDEX + Math.floor((target - ANCHOR_AD_UTC_MS) / DAY_MS);
+  if (idx < 0 || idx >= TOTAL_BS_DAYS) {
+    throw new Error('Date outside supported range (1992-2100 BS)');
   }
-  const lastMs = toUTCMs(
-    bsToAd({ year: MAX_BS_YEAR, month: 12, day: daysInBSMonth(MAX_BS_YEAR, 12) }),
-  );
-  if (target > lastMs) {
-    throw new Error('Date after supported range (after 2100 BS)');
-  }
-  return dayFromIndex(Math.floor((target - ANCHOR_AD_UTC_MS) / DAY_MS));
+  return dayFromIndex(idx);
 }
 
 export function getTodayBS(): BSDate {
