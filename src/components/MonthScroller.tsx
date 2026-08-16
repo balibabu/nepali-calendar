@@ -1,9 +1,11 @@
-import React, { useCallback, useMemo, useRef } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useRef } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { FlashList, ViewToken } from '@shopify/flash-list';
 import { BSDate, BS_MONTHS, monthFromIndex } from '../utils/nepaliDate';
 import { MonthGrid } from './MonthGrid';
 import { CalendarEvent } from '../utils/events';
 import { colors, spacing, typography } from '../theme';
+import { useWindowedList } from '../hooks/useWindowedList';
 
 interface MonthScrollerProps {
   today: BSDate;
@@ -14,8 +16,12 @@ interface MonthScrollerProps {
   onVisibleMonthChange: (monthIdx: number) => void;
 }
 
-const MONTH_ITEM_HEIGHT_ESTIMATE = 420;
 const MONTHS_TOTAL = (2100 - 1992 + 1) * 12;
+const VIEWABILITY = { itemVisiblePercentThreshold: 40 };
+
+function ListFooter() {
+  return <View style={styles.footer} />;
+}
 
 export function MonthScroller({
   today,
@@ -25,31 +31,25 @@ export function MonthScroller({
   onSelectDay,
   onVisibleMonthChange,
 }: MonthScrollerProps) {
-  const listRef = useRef<FlatList<number>>(null);
   const reportRef = useRef(onVisibleMonthChange);
   reportRef.current = onVisibleMonthChange;
 
-  const monthIds = useMemo(
-    () => Array.from({ length: MONTHS_TOTAL }, (_, i) => i),
-    [],
-  );
+  const { indices, start, extendStart, extendEnd, onScroll } = useWindowedList({
+    total: MONTHS_TOTAL,
+    anchor: Math.max(0, anchorMonthIdx - 1),
+    padEnd: 12,
+  });
 
   const keyExtractor = useCallback((id: number) => `m-${id}`, []);
 
-  const getItemLayout = useCallback(
-    (_data: unknown, index: number) => ({
-      length: MONTH_ITEM_HEIGHT_ESTIMATE,
-      offset: MONTH_ITEM_HEIGHT_ESTIMATE * index,
-      index,
-    }),
-    [],
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<number>[] }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index != null) {
+        reportRef.current(start + viewableItems[0].index);
+      }
+    },
+    [start],
   );
-
-  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    if (viewableItems.length > 0 && viewableItems[0].index != null) {
-      reportRef.current(viewableItems[0].index as number);
-    }
-  }).current;
 
   const renderItem = useCallback(
     ({ item }: { item: number }) => {
@@ -58,7 +58,7 @@ export function MonthScroller({
         <View style={styles.monthBlock}>
           <View style={styles.monthHeader}>
             <Text style={styles.monthTitle}>{BS_MONTHS[month - 1]}</Text>
-            {month===1 && <Text style={styles.monthYear}>{year}</Text>}
+            {month === 1 && <Text style={styles.monthYear}>{year}</Text>}
           </View>
           <MonthGrid
             year={year}
@@ -76,21 +76,17 @@ export function MonthScroller({
 
   return (
     <View style={styles.root}>
-      <FlatList
-        ref={listRef}
-        data={monthIds}
+      <FlashList
+        data={indices}
         keyExtractor={keyExtractor}
-        getItemLayout={getItemLayout}
         renderItem={renderItem}
-        initialScrollIndex={Math.max(0, Math.min(MONTHS_TOTAL - 1, anchorMonthIdx - 1))}
-        initialNumToRender={3}
-        maxToRenderPerBatch={2}
-        windowSize={5}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        onStartReached={extendStart}
+        onEndReached={extendEnd}
         onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 40 }}
-        contentContainerStyle={styles.listContent}
-        removeClippedSubviews
+        viewabilityConfig={VIEWABILITY}
+        ListFooterComponent={ListFooter}
       />
     </View>
   );
@@ -99,6 +95,9 @@ export function MonthScroller({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  footer: {
+    height: 24,
   },
   monthBlock: {
     paddingHorizontal: spacing.lg,
@@ -119,8 +118,5 @@ const styles = StyleSheet.create({
     fontSize: typography.callout,
     color: colors.textSecondary,
     marginLeft: spacing.sm,
-  },
-  listContent: {
-    paddingBottom: 24,
   },
 });

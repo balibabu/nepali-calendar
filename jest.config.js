@@ -6,6 +6,6 @@ module.exports = {
       '@react-native/jest-preset/jest/assetFileTransformer.js',
   },
   transformIgnorePatterns: [
-    'node_modules/(?!(@react-native|react-native|lucide-react-native|@react-native-async-storage)/)',
+    'node_modules/(?!(@react-native|react-native|lucide-react-native|@react-native-async-storage|@shopify)/)',
   ],
 };

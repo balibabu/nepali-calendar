@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlashList, FlashListRef, ViewToken } from '@shopify/flash-list';
 import { Trash2 } from 'lucide-react-native';
 import { CalendarEvent, formatTime } from '../utils/events';
 import {
@@ -12,6 +13,7 @@ import {
   toKey,
 } from '../utils/nepaliDate';
 import { CATEGORY_COLORS, colors, spacing, typography } from '../theme';
+import { useWindowedList } from '../hooks/useWindowedList';
 
 interface DayScrollerProps {
   today: BSDate;
@@ -26,25 +28,34 @@ interface DayItem {
   key: string;
 }
 
-const DAY_HEADER_ESTIMATE = 120;
-const DAY_COUNT = TOTAL_BS_DAYS;
+const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
+
+function ListFooter() {
+  return <View style={styles.footer} />;
+}
 
 export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: DayScrollerProps) {
-  const listRef = useRef<FlatList<DayItem>>(null);
+  const listRef = useRef<FlashListRef<DayItem>>(null);
   const anchorIdxRef = useRef<number>(-1);
   const firstLayoutRef = useRef(true);
   const isInternalScrollRef = useRef(false);
 
+  const anchorIdx = useMemo(() => dayIndex(anchor), [anchor]);
+
+  const { indices, start, end, extendStart, extendEnd, onScroll } = useWindowedList({
+    total: TOTAL_BS_DAYS,
+    anchor: anchorIdx,
+    padEnd: 30,
+  });
+
   const dayItems = useMemo<DayItem[]>(
     () =>
-      Array.from({ length: DAY_COUNT }, (_, i) => {
+      indices.map(i => {
         const date = dayFromIndex(i);
         return { date, key: toKey(date) };
       }),
-    [],
+    [indices],
   );
-
-  const anchorIdx = useMemo(() => dayIndex(anchor), [anchor]);
 
   useEffect(() => {
     if (firstLayoutRef.current) {
@@ -54,14 +65,17 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
     if (anchorIdx === anchorIdxRef.current) {
       return;
     }
+    if (anchorIdx < start || anchorIdx > end) {
+      return;
+    }
     anchorIdxRef.current = anchorIdx;
     isInternalScrollRef.current = true;
     listRef.current?.scrollToIndex({
-      index: Math.max(0, anchorIdx),
+      index: anchorIdx - start,
       animated: false,
       viewPosition: 0,
     });
-  }, [anchorIdx]);
+  }, [anchorIdx, start, end]);
 
   const onScrollEnd = useCallback(() => {
     isInternalScrollRef.current = false;
@@ -69,17 +83,8 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
 
   const keyExtractor = useCallback((item: DayItem) => item.key, []);
 
-  const getItemLayout = useCallback(
-    (_data: unknown, index: number) => ({
-      length: DAY_HEADER_ESTIMATE,
-      offset: DAY_HEADER_ESTIMATE * index,
-      index,
-    }),
-    [],
-  );
-
-  const onViewableItemsChanged = useRef(
-    ({ viewableItems }: { viewableItems: Array<{ item: DayItem; index?: number | null }> }) => {
+  const onViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<DayItem>[] }) => {
       if (firstLayoutRef.current && viewableItems.length > 0) {
         firstLayoutRef.current = false;
         return;
@@ -91,14 +96,8 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
         onSelectDay(viewableItems[0].item.date);
       }
     },
-  ).current;
-
-  const onScrollToIndexFailed = (info: { index: number }) => {
-    listRef.current?.scrollToOffset({
-      offset: DAY_HEADER_ESTIMATE * info.index,
-      animated: false,
-    });
-  };
+    [onSelectDay],
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: DayItem }) => {
@@ -149,23 +148,20 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
 
   return (
     <View style={styles.root}>
-      <FlatList
+      <FlashList
         ref={listRef}
         data={dayItems}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
-        initialScrollIndex={Math.max(0, anchorIdx)}
-        getItemLayout={getItemLayout}
-        initialNumToRender={6}
-        maxToRenderPerBatch={8}
-        windowSize={5}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        onStartReached={extendStart}
+        onEndReached={extendEnd}
         onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+        viewabilityConfig={VIEWABILITY}
         onScrollEndDrag={onScrollEnd}
         onMomentumScrollEnd={onScrollEnd}
-        onScrollToIndexFailed={onScrollToIndexFailed}
-        contentContainerStyle={styles.listContent}
+        ListFooterComponent={ListFooter}
       />
     </View>
   );
@@ -174,6 +170,9 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+  footer: {
+    height: 24,
   },
   dayBlock: {
     paddingHorizontal: spacing.lg,
@@ -237,8 +236,5 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.text,
     fontWeight: '500',
-  },
-  listContent: {
-    paddingBottom: 24,
   },
 });
