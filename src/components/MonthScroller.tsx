@@ -58,7 +58,7 @@ export function MonthScroller({
         <View style={styles.monthBlock}>
           <View style={styles.monthHeader}>
             <Text style={styles.monthTitle}>{BS_MONTHS[month - 1]}</Text>
-            <Text style={styles.monthYear}>{year}</Text>
+            {month===1 && <Text style={styles.monthYear}>{year}</Text>}
           </View>
           <MonthGrid
             year={year}

@@ -20,17 +20,13 @@ export function CalendarHeader({
 }: CalendarHeaderProps) {
   return (
     <View style={styles.row}>
-      <Pressable
-        style={styles.left}
-        onPress={leftAsButton ? onLeftPress : undefined}
-        hitSlop={8}
-        disabled={!leftLabel}
-      >
+      <Pressable style={styles.left} onPress={onLeftPress} hitSlop={8} disabled={!leftLabel}>
+
         {leftLabel ? (
           <>
-            {leftAsButton ? null : <ChevronLeft size={22} color={colors.red} />}
+            <ChevronLeft size={22} color={colors.red} />
             <Text
-              style={[styles.leftLabel, leftAsButton && styles.leftLabelButton]}
+              style={[styles.leftLabel]}
               numberOfLines={1}
             >
               {leftLabel}
@@ -67,8 +63,9 @@ const styles = StyleSheet.create({
   },
   leftLabel: {
     color: colors.red,
-    fontSize: typography.body,
     maxWidth: 180,
+    fontSize: typography.headline,
+    fontWeight: '700',
   },
   leftLabelButton: {
     color: colors.text,
