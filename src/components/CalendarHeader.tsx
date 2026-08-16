@@ -1,51 +1,44 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { ChevronDown, ChevronLeft, Plus, Search } from 'lucide-react-native';
+import { ChevronLeft, Plus, Search } from 'lucide-react-native';
 import { colors, spacing, typography } from '../theme';
 
 interface CalendarHeaderProps {
-  backLabel: string | null;
-  title: string;
-  titleAsButton?: boolean;
-  onBack: () => void;
-  onTitlePress?: () => void;
+  leftLabel: string | null;
+  leftAsButton?: boolean;
+  onLeftPress: () => void;
   onSearch: () => void;
   onAdd: () => void;
 }
 
 export function CalendarHeader({
-  backLabel,
-  title,
-  titleAsButton = false,
-  onBack,
-  onTitlePress,
+  leftLabel,
+  leftAsButton = false,
+  onLeftPress,
   onSearch,
   onAdd,
 }: CalendarHeaderProps) {
   return (
     <View style={styles.row}>
-      <Pressable style={styles.back} onPress={onBack} hitSlop={10} disabled={!backLabel}>
-        {backLabel ? (
+      <Pressable
+        style={styles.left}
+        onPress={leftAsButton ? onLeftPress : undefined}
+        hitSlop={8}
+        disabled={!leftLabel}
+      >
+        {leftLabel ? (
           <>
-            <ChevronLeft size={22} color={colors.red} />
-            <Text style={styles.backLabel} numberOfLines={1}>
-              {backLabel}
+            {leftAsButton ? null : <ChevronLeft size={22} color={colors.red} />}
+            <Text
+              style={[styles.leftLabel, leftAsButton && styles.leftLabelButton]}
+              numberOfLines={1}
+            >
+              {leftLabel}
             </Text>
           </>
         ) : (
-          <View style={styles.backSpacer} />
+          <View style={styles.leftSpacer} />
         )}
-      </Pressable>
-      <Pressable
-        style={styles.titleWrap}
-        onPress={titleAsButton ? onTitlePress : undefined}
-        hitSlop={8}
-        disabled={!titleAsButton}
-      >
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-        {titleAsButton && <ChevronDown size={16} color={colors.textSecondary} />}
       </Pressable>
       <View style={styles.actions}>
         <Pressable onPress={onSearch} hitSlop={8} style={styles.iconBtn}>
@@ -67,33 +60,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     marginBottom: spacing.sm,
   },
-  back: {
+  left: {
     flexDirection: 'row',
     alignItems: 'center',
-    maxWidth: 130,
+    maxWidth: 220,
   },
-  backLabel: {
+  leftLabel: {
     color: colors.red,
     fontSize: typography.body,
-    maxWidth: 100,
+    maxWidth: 180,
   },
-  backSpacer: {
+  leftLabelButton: {
+    color: colors.text,
+    fontSize: typography.headline,
+    fontWeight: '700',
+  },
+  leftSpacer: {
     width: 28,
   },
-  titleWrap: {
+  actions: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: typography.headline,
-    fontWeight: '700',
-    color: colors.text,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   iconBtn: {
     marginLeft: spacing.md,

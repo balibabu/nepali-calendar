@@ -34,7 +34,6 @@ export default function App() {
   const [visibleMonthIdx, setVisibleMonthIdxState] = useState(anchorMonthIdx);
   const [anchorYear, setAnchorYear] = useState(today.year);
   const visibleYearRef = useRef(today.year);
-  const [visibleYear, setVisibleYearState] = useState(today.year);
   const [addOpen, setAddOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -46,21 +45,26 @@ export default function App() {
   }, []);
 
   const setVisibleYear = useCallback((year: number) => {
-    if (visibleYearRef.current !== year) {
-      visibleYearRef.current = year;
-      setVisibleYearState(year);
-    }
+    visibleYearRef.current = year;
   }, []);
 
   const { events, addEvent, deleteEvent, visibleEvents } = useEventStore();
 
+  const selectedRef = useRef(selected);
+
   const handleSelectDay = useCallback((date: BSDate) => {
+    const prev = selectedRef.current;
+    if (prev.year === date.year && prev.month === date.month && prev.day === date.day) {
+      setLevel('day');
+      return;
+    }
+    selectedRef.current = date;
     setSelected(date);
   }, []);
 
-  const openDayLevel = useCallback((date: BSDate) => {
+  const setSelectedDate = useCallback((date: BSDate) => {
+    selectedRef.current = date;
     setSelected(date);
-    setLevel('day');
   }, []);
 
   const openMonthsLevel = useCallback((year: number) => {
@@ -78,53 +82,38 @@ export default function App() {
   const openMonthLevelForDate = useCallback(
     (date: BSDate) => {
       const idx = monthIndex(date.year, date.month);
-      setSelected(date);
+      setSelectedDate(date);
       setAnchorMonthIdx(idx);
       setVisibleMonthIdx(idx);
       setLevel('month');
     },
-    [setVisibleMonthIdx],
+    [setVisibleMonthIdx, setSelectedDate],
   );
 
   const goToday = useCallback(() => {
     const idx = monthIndex(today.year, today.month);
-    setSelected(today);
+    setSelectedDate(today);
     setVisibleYear(today.year);
     setAnchorMonthIdx(idx);
     setVisibleMonthIdx(idx);
     setLevel('month');
     setMonthJump(j => j + 1);
-  }, [today, setVisibleYear, setVisibleMonthIdx]);
+  }, [today, setVisibleYear, setVisibleMonthIdx, setSelectedDate]);
 
   const visibleMonth = monthFromIndex(visibleMonthIdx);
 
-  const headerTitle =
+  const leftLabel =
     level === 'months'
-      ? String(visibleYear)
-      : level === 'month'
-        ? `${BS_MONTHS[visibleMonth.month - 1]} ${visibleMonth.year}`
-        : `${selected.day} ${BS_MONTHS[selected.month - 1]}`;
-
-  const backLabel =
-    level === 'day'
-      ? BS_MONTHS[selected.month - 1]
-      : level === 'months'
-        ? BS_MONTHS[visibleMonth.month - 1]
+      ? null
+      : level === 'day'
+        ? BS_MONTHS[selected.month - 1]
         : String(visibleMonth.year);
 
-  const onBack = () => {
+  const onLeftPress = () => {
     if (level === 'day') {
       openMonthLevel(monthIndex(selected.year, selected.month));
-    } else if (level === 'months') {
-      openMonthLevel(visibleMonthIdx);
-    }
-  };
-
-  const onHeaderTitle = () => {
-    if (level === 'month') {
+    } else if (level === 'month') {
       openMonthsLevel(visibleMonth.year);
-    } else if (level === 'day') {
-      openMonthsLevel(selected.year);
     }
   };
 
@@ -133,11 +122,9 @@ export default function App() {
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.root}>
         <CalendarHeader
-          backLabel={backLabel}
-          title={headerTitle}
-          titleAsButton={level !== 'months'}
-          onBack={onBack}
-          onTitlePress={onHeaderTitle}
+          leftLabel={leftLabel}
+          leftAsButton={level === 'month'}
+          onLeftPress={onLeftPress}
           onSearch={() => setSearchOpen(true)}
           onAdd={() => setAddOpen(true)}
         />
@@ -159,7 +146,7 @@ export default function App() {
             today={today}
             selected={selected}
             anchorYear={anchorYear}
-            onSelectDay={openDayLevel}
+            onSelectDay={openMonthLevelForDate}
             onVisibleYearChange={setVisibleYear}
           />
         )}
@@ -169,7 +156,7 @@ export default function App() {
             today={today}
             anchor={selected}
             events={visibleEvents}
-            onSelectDay={handleSelectDay}
+            onSelectDay={setSelectedDate}
             onDelete={deleteEvent}
           />
         )}
