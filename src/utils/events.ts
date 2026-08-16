@@ -9,28 +9,20 @@ export interface CalendarEvent {
   dateKey: string;
   title: string;
   notes?: string;
-  hour: number; // 0..23
-  minute: number; // 0..59
+  hour: number;
+  minute: number;
   category: Category;
-  createdAt: number;
-}
-
-export interface InboxItem {
-  id: string;
-  title: string;
-  subtitle: string;
   createdAt: number;
 }
 
 interface EventStore {
   events: Record<string, CalendarEvent[]>;
   hidden: Category[];
-  inbox: InboxItem[];
 }
 
-const STORAGE_KEY = 'nepali_calendar_events_v2';
+const STORAGE_KEY = 'nepali_calendar_events_v3';
 
-const EMPTY: EventStore = { events: {}, hidden: [], inbox: [] };
+const EMPTY: EventStore = { events: {}, hidden: [] };
 
 function parseStore(raw: string | null): EventStore {
   if (!raw) {
@@ -41,7 +33,6 @@ function parseStore(raw: string | null): EventStore {
     return {
       events: parsed.events ?? {},
       hidden: parsed.hidden ?? [],
-      inbox: parsed.inbox ?? [],
     };
   } catch {
     return EMPTY;
@@ -50,26 +41,14 @@ function parseStore(raw: string | null): EventStore {
 
 export function useEventStore() {
   const [store, setStore] = useState<EventStore>(EMPTY);
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     AsyncStorage.getItem(STORAGE_KEY)
-      .then(async raw => {
+      .then(raw => {
         if (raw === null) {
-          const seed: EventStore = {
-            events: {},
-            hidden: [],
-            inbox: [
-              {
-                id: 'welcome',
-                title: 'Welcome to Calendar',
-                subtitle: 'Tap + to schedule your first event',
-                createdAt: Date.now(),
-              },
-            ],
-          };
-          await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seed));
+          const seed: EventStore = { events: {}, hidden: [] };
+          AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(seed)).catch(() => {});
           return seed;
         }
         return parseStore(raw);
@@ -79,12 +58,7 @@ export function useEventStore() {
           setStore(parsed);
         }
       })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) {
-          setReady(true);
-        }
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -137,13 +111,6 @@ export function useEventStore() {
     [store, commit],
   );
 
-  const clearInboxItem = useCallback(
-    (id: string) => {
-      commit({ ...store, inbox: store.inbox.filter(i => i.id !== id) });
-    },
-    [store, commit],
-  );
-
   const visibleEvents = useMemo(() => {
     if (store.hidden.length === 0) {
       return store.events;
@@ -158,25 +125,13 @@ export function useEventStore() {
     return out;
   }, [store.events, store.hidden]);
 
-  const sortedDay = useCallback(
-    (dateKey: string): CalendarEvent[] =>
-      (visibleEvents[dateKey] ?? [])
-        .slice()
-        .sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute)),
-    [visibleEvents],
-  );
-
   return {
     events: store.events,
     hidden: store.hidden,
-    inbox: store.inbox,
-    ready,
     addEvent,
     deleteEvent,
     toggleCategory,
-    clearInboxItem,
     visibleEvents,
-    sortedDay,
   };
 }
 

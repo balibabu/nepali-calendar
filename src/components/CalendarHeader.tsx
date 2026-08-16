@@ -1,27 +1,25 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { ChevronLeft, Columns2, Plus, Search } from 'lucide-react-native';
+import { ChevronDown, ChevronLeft, Plus, Search } from 'lucide-react-native';
 import { colors, spacing, typography } from '../theme';
 
 interface CalendarHeaderProps {
   backLabel: string | null;
   title: string;
-  showSplitToggle: boolean;
-  splitMode: boolean;
+  titleAsButton?: boolean;
   onBack: () => void;
+  onTitlePress?: () => void;
   onSearch: () => void;
-  onToggleSplit: () => void;
   onAdd: () => void;
 }
 
 export function CalendarHeader({
   backLabel,
   title,
-  showSplitToggle,
-  splitMode,
+  titleAsButton = false,
   onBack,
+  onTitlePress,
   onSearch,
-  onToggleSplit,
   onAdd,
 }: CalendarHeaderProps) {
   return (
@@ -38,18 +36,21 @@ export function CalendarHeader({
           <View style={styles.backSpacer} />
         )}
       </Pressable>
-      <Text style={styles.title} numberOfLines={1}>
-        {title}
-      </Text>
+      <Pressable
+        style={styles.titleWrap}
+        onPress={titleAsButton ? onTitlePress : undefined}
+        hitSlop={8}
+        disabled={!titleAsButton}
+      >
+        <Text style={styles.title} numberOfLines={1}>
+          {title}
+        </Text>
+        {titleAsButton && <ChevronDown size={16} color={colors.textSecondary} />}
+      </Pressable>
       <View style={styles.actions}>
         <Pressable onPress={onSearch} hitSlop={8} style={styles.iconBtn}>
           <Search size={21} color={colors.text} />
         </Pressable>
-        {showSplitToggle && (
-          <Pressable onPress={onToggleSplit} hitSlop={8} style={styles.iconBtn}>
-            <Columns2 size={21} color={splitMode ? colors.red : colors.text} />
-          </Pressable>
-        )}
         <Pressable onPress={onAdd} hitSlop={8} style={styles.iconBtn}>
           <Plus size={24} color={colors.text} />
         </Pressable>
@@ -79,9 +80,13 @@ const styles = StyleSheet.create({
   backSpacer: {
     width: 28,
   },
-  title: {
+  titleWrap: {
     flex: 1,
-    textAlign: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
     fontSize: typography.headline,
     fontWeight: '700',
     color: colors.text,

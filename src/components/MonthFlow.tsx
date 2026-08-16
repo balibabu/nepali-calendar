@@ -1,29 +1,33 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { BSDate } from '../utils/nepaliDate';
 import { MiniMonth } from './MiniMonth';
 import { colors, spacing } from '../theme';
 
-interface YearScrollerProps {
+interface MonthFlowProps {
   today: BSDate;
   selected: BSDate;
   anchorYear: number;
   onSelectDay: (date: BSDate) => void;
+  onVisibleYearChange?: (year: number) => void;
 }
 
 const MIN_YEAR = 1992;
 const MAX_YEAR = 2100;
 const YEARS_TOTAL = MAX_YEAR - MIN_YEAR + 1;
-const YEAR_BLOCK_ESTIMATE = 860;
+const MONTH_ROW_HEIGHT = 198;
+const YEAR_BLOCK_ESTIMATE = MONTH_ROW_HEIGHT * 3 + 54;
 
-export function YearScroller({
+export function MonthFlow({
   today,
   selected,
   anchorYear,
   onSelectDay,
-}: YearScrollerProps) {
+  onVisibleYearChange,
+}: MonthFlowProps) {
   const listRef = useRef<FlatList<number>>(null);
-  const [, setTopYear] = useState(anchorYear);
+  const reportRef = useRef(onVisibleYearChange);
+  reportRef.current = onVisibleYearChange;
 
   const yearIds = useMemo(
     () => Array.from({ length: YEARS_TOTAL }, (_, i) => MIN_YEAR + i),
@@ -44,7 +48,7 @@ export function YearScroller({
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<{ index?: number | null }> }) => {
       if (viewableItems.length > 0 && viewableItems[0].index != null) {
-        setTopYear(MIN_YEAR + viewableItems[0].index);
+        reportRef.current?.(MIN_YEAR + viewableItems[0].index);
       }
     },
   ).current;
@@ -80,14 +84,16 @@ export function YearScroller({
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         getItemLayout={getItemLayout}
-        initialScrollIndex={Math.max(0, anchorYear - MIN_YEAR)}
+        initialScrollIndex={Math.max(0, Math.min(YEARS_TOTAL - 1, anchorYear - MIN_YEAR))}
         initialNumToRender={2}
         maxToRenderPerBatch={1}
-        windowSize={4}
+        windowSize={5}
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 20 }}
-        contentContainerStyle={{ paddingBottom: 340 }}
+        contentContainerStyle={styles.listContent}
+        onEndReachedThreshold={0.2}
+        removeClippedSubviews
       />
     </View>
   );
@@ -114,5 +120,8 @@ const styles = StyleSheet.create({
   monthsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  listContent: {
+    paddingBottom: 24,
   },
 });

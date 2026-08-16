@@ -167,7 +167,7 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
         onScrollEndDrag={onScrollEndDrag}
         onMomentumScrollEnd={onMomentumScrollEnd}
         onScrollToIndexFailed={onScrollToIndexFailed}
-        contentContainerStyle={{ paddingBottom: 400 }}
+        contentContainerStyle={styles.listContent}
       />
     </View>
   );
@@ -239,5 +239,8 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.text,
     fontWeight: '500',
+  },
+  listContent: {
+    paddingBottom: 24,
   },
 });

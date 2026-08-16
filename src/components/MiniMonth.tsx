@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BSDate, BS_MONTHS, getMonthGrid } from '../utils/nepaliDate';
 import { colors, typography } from '../theme';
@@ -11,9 +11,16 @@ interface MiniMonthProps {
   onSelectDay: (date: BSDate) => void;
 }
 
-export function MiniMonth({ year, month, today, selected, onSelectDay }: MiniMonthProps) {
-  const weeks = getMonthGrid(year, month, today);
+export const MiniMonth = memo(function MiniMonthBase({
+  year,
+  month,
+  today,
+  selected,
+  onSelectDay,
+}: MiniMonthProps) {
+  const weeks = useMemo(() => getMonthGrid(year, month, today), [year, month, today]);
   const isThisMonth = today.year === year && today.month === month;
+  const selKey = `${selected.year}-${selected.month}-${selected.day}`;
 
   return (
     <View style={styles.wrap}>
@@ -26,20 +33,18 @@ export function MiniMonth({ year, month, today, selected, onSelectDay }: MiniMon
             if (cell.day === null) {
               return <View key={cell.key} style={styles.cell} />;
             }
-            const isSel =
-              cell.date!.year === selected.year &&
-              cell.date!.month === selected.month &&
-              cell.date!.day === selected.day;
+            const d = cell.date!;
+            const isSel = `${d.year}-${d.month}-${d.day}` === selKey;
             return (
               <Pressable
                 key={cell.key}
                 style={styles.cell}
-                onPress={() => cell.date && onSelectDay(cell.date)}
+                onPress={() => onSelectDay(d)}
               >
                 <View
                   style={[
                     styles.circle,
-                    isSel && styles.circleSel,
+                    isSel && !cell.isToday && styles.circleSel,
                     cell.isToday && styles.circleToday,
                   ]}
                 >
@@ -68,14 +73,14 @@ export function MiniMonth({ year, month, today, selected, onSelectDay }: MiniMon
       ))}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {
-    flex: 1,
+    width: '25%',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    marginBottom: 24,
+    paddingHorizontal: 4,
+    marginBottom: 20,
   },
   monthName: {
     fontSize: typography.footnote,

@@ -1,15 +1,13 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { Animated, StatusBar, StyleSheet } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { CalendarHeader } from './src/components/CalendarHeader';
 import { BottomBar } from './src/components/BottomBar';
 import { MonthScroller } from './src/components/MonthScroller';
-import { YearScroller } from './src/components/YearScroller';
+import { MonthFlow } from './src/components/MonthFlow';
 import { DayScroller } from './src/components/DayScroller';
 import { AddEventSheet } from './src/components/AddEventSheet';
-import { CalendarsSheet } from './src/components/CalendarsSheet';
 import { SearchSheet } from './src/components/SearchSheet';
-import { InboxSheet } from './src/components/InboxSheet';
 import {
   BSDate,
   BS_MONTHS,
@@ -20,7 +18,7 @@ import {
 import { useEventStore } from './src/utils/events';
 import { colors } from './src/theme';
 
-type Level = 'year' | 'month' | 'day';
+type Level = 'months' | 'month' | 'day';
 
 export default function App() {
   const today = useMemo(() => getTodayBS(), []);
@@ -29,107 +27,95 @@ export default function App() {
   const [anchorMonthIdx, setAnchorMonthIdx] = useState(() =>
     monthIndex(today.year, today.month),
   );
-  const [anchorYear, setAnchorYear] = useState(today.year);
-  const [addOpen, setAddOpen] = useState(false);
-  const [calendarsOpen, setCalendarsOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [inboxOpen, setInboxOpen] = useState(false);
-
-  const {
-    events,
-    hidden,
-    inbox,
-    addEvent,
-    deleteEvent,
-    toggleCategory,
-    clearInboxItem,
-    visibleEvents,
-  } = useEventStore();
-
-  const zoom = useRef(new Animated.Value(0)).current;
-
-  const transition = useCallback(
-    (target: Level) => {
-      Animated.sequence([
-        Animated.timing(zoom, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setLevel(target);
-        zoom.setValue(0);
-      });
-    },
-    [zoom],
+  const [visibleMonthIdx, setVisibleMonthIdx] = useState(() =>
+    monthIndex(today.year, today.month),
   );
+  const [anchorYear, setAnchorYear] = useState(today.year);
+  const [visibleYear, setVisibleYear] = useState(today.year);
+  const [addOpen, setAddOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  const handleSelectDay = useCallback(
+  const { events, addEvent, deleteEvent, visibleEvents } = useEventStore();
+
+  const handleSelectDay = useCallback((date: BSDate) => {
+    setSelected(date);
+  }, []);
+
+  const openDayLevel = useCallback((date: BSDate) => {
+    setSelected(date);
+    setLevel('day');
+  }, []);
+
+  const openMonthsLevel = useCallback((year: number) => {
+    setAnchorYear(year);
+    setVisibleYear(year);
+    setLevel('months');
+  }, []);
+
+  const openMonthLevel = useCallback((monthIdx: number) => {
+    setAnchorMonthIdx(monthIdx);
+    setVisibleMonthIdx(monthIdx);
+    setLevel('month');
+  }, []);
+
+  const openMonthLevelForDate = useCallback(
     (date: BSDate) => {
+      const idx = monthIndex(date.year, date.month);
       setSelected(date);
+      setAnchorMonthIdx(idx);
+      setVisibleMonthIdx(idx);
+      setLevel('month');
     },
     [],
   );
 
-  const openDayLevel = useCallback(
-    (date: BSDate) => {
-      setSelected(date);
-      transition('day');
-    },
-    [transition],
-  );
-
-  const collapseToYear = useCallback(
-    (year: number) => {
-      setAnchorYear(year);
-      transition('year');
-    },
-    [transition],
-  );
-
-  const openMonthLevel = useCallback(
-    (year: number, month: number) => {
-      setAnchorMonthIdx(monthIndex(year, month));
-      transition('month');
-    },
-    [transition],
-  );
-
   const goToday = useCallback(() => {
+    const idx = monthIndex(today.year, today.month);
     setSelected(today);
-    setAnchorMonthIdx(monthIndex(today.year, today.month));
-    setAnchorYear(today.year);
-    if (level !== 'month') {
-      transition('month');
+    setVisibleYear(today.year);
+    if (level === 'month') {
+      if (idx !== visibleMonthIdx) {
+        setAnchorMonthIdx(idx);
+        setVisibleMonthIdx(idx);
+      }
+    } else {
+      setAnchorMonthIdx(idx);
+      setVisibleMonthIdx(idx);
+      setLevel('month');
     }
-  }, [today, level, transition]);
+  }, [today, level, visibleMonthIdx]);
+
+  const visibleMonth = monthFromIndex(visibleMonthIdx);
 
   const headerTitle =
-    level === 'year'
-      ? 'Years'
+    level === 'months'
+      ? String(visibleYear)
       : level === 'month'
-        ? `${BS_MONTHS[selected.month - 1]} ${selected.year}`
+        ? `${BS_MONTHS[visibleMonth.month - 1]} ${visibleMonth.year}`
         : `${selected.day} ${BS_MONTHS[selected.month - 1]}`;
 
   const backLabel =
     level === 'day'
       ? BS_MONTHS[selected.month - 1]
-      : level === 'month'
-        ? String(monthFromIndex(anchorMonthIdx).year)
-        : null;
+      : level === 'months'
+        ? BS_MONTHS[visibleMonth.month - 1]
+        : String(visibleMonth.year);
 
   const onBack = () => {
     if (level === 'day') {
-      openMonthLevel(selected.year, selected.month);
-    } else if (level === 'month') {
-      collapseToYear(monthFromIndex(anchorMonthIdx).year);
+      openMonthLevel(monthIndex(selected.year, selected.month));
+    } else if (level === 'months') {
+      openMonthLevel(visibleMonthIdx);
     }
   };
 
-  const scale = zoom.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0.93],
-  });
+  const onHeaderTitle = () => {
+    if (level === 'month') {
+      openMonthsLevel(visibleMonth.year);
+    } else if (level === 'day') {
+      openMonthsLevel(selected.year);
+    }
+  };
 
   return (
     <SafeAreaProvider>
@@ -138,52 +124,46 @@ export default function App() {
         <CalendarHeader
           backLabel={backLabel}
           title={headerTitle}
-          showSplitToggle={false}
-          splitMode={false}
+          titleAsButton={level !== 'months'}
           onBack={onBack}
+          onTitlePress={onHeaderTitle}
           onSearch={() => setSearchOpen(true)}
-          onToggleSplit={() => undefined}
           onAdd={() => setAddOpen(true)}
         />
 
-        <Animated.View style={[styles.body, { transform: [{ scale }] }]}>
-          {level === 'month' && (
-            <MonthScroller
-              key={`month-${anchorMonthIdx}`}
-              today={today}
-              selected={selected}
-              events={visibleEvents}
-              onSelectDay={handleSelectDay}
-              onCollapseToYear={collapseToYear}
-            />
-          )}
-          {level === 'year' && (
-            <YearScroller
-              key={`year-${anchorYear}`}
-              today={today}
-              selected={selected}
-              anchorYear={anchorYear}
-              onSelectDay={openDayLevel}
-            />
-          )}
-          {level === 'day' && (
-            <DayScroller
-              key="day-scroller"
-              today={today}
-              anchor={selected}
-              events={visibleEvents}
-              onSelectDay={handleSelectDay}
-              onDelete={deleteEvent}
-            />
-          )}
-        </Animated.View>
+        {level === 'month' && (
+          <MonthScroller
+            key={`month-${anchorMonthIdx}`}
+            today={today}
+            selected={selected}
+            events={visibleEvents}
+            anchorMonthIdx={anchorMonthIdx}
+            onSelectDay={handleSelectDay}
+            onVisibleMonthChange={setVisibleMonthIdx}
+          />
+        )}
+        {level === 'months' && (
+          <MonthFlow
+            key={`months-${anchorYear}`}
+            today={today}
+            selected={selected}
+            anchorYear={anchorYear}
+            onSelectDay={openDayLevel}
+            onVisibleYearChange={setVisibleYear}
+          />
+        )}
+        {level === 'day' && (
+          <DayScroller
+            key="day-scroller"
+            today={today}
+            anchor={selected}
+            events={visibleEvents}
+            onSelectDay={handleSelectDay}
+            onDelete={deleteEvent}
+          />
+        )}
 
-        <BottomBar
-          inboxCount={inbox.length}
-          onToday={goToday}
-          onCalendars={() => setCalendarsOpen(true)}
-          onInbox={() => setInboxOpen(true)}
-        />
+        <BottomBar onToday={goToday} />
 
         <AddEventSheet
           visible={addOpen}
@@ -191,28 +171,12 @@ export default function App() {
           onClose={() => setAddOpen(false)}
           onSave={data => addEvent(selected, data)}
         />
-        <CalendarsSheet
-          visible={calendarsOpen}
-          hidden={hidden}
-          onClose={() => setCalendarsOpen(false)}
-          onToggle={toggleCategory}
-        />
         <SearchSheet
           visible={searchOpen}
           events={events}
-          hidden={hidden}
+          hidden={[]}
           onClose={() => setSearchOpen(false)}
-          onSelectDate={d => {
-            setSelected(d);
-            setAnchorMonthIdx(monthIndex(d.year, d.month));
-            setLevel('month');
-          }}
-        />
-        <InboxSheet
-          visible={inboxOpen}
-          items={inbox}
-          onClose={() => setInboxOpen(false)}
-          onClear={clearInboxItem}
+          onSelectDate={d => openMonthLevelForDate(d)}
         />
       </SafeAreaView>
     </SafeAreaProvider>
@@ -223,8 +187,5 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
-  },
-  body: {
-    flex: 1,
   },
 });
