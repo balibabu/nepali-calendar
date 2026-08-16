@@ -20,7 +20,9 @@ export const MiniMonth = memo(function MiniMonthBase({
 }: MiniMonthProps) {
   const weeks = useMemo(() => getMonthGrid(year, month, today), [year, month, today]);
   const isThisMonth = today.year === year && today.month === month;
-  const selKey = `${selected.year}-${selected.month}-${selected.day}`;
+  const selKey = selected.year === year && selected.month === month
+    ? String(selected.day)
+    : '';
 
   return (
     <View style={styles.wrap}>
@@ -34,7 +36,7 @@ export const MiniMonth = memo(function MiniMonthBase({
               return <View key={cell.key} style={styles.cell} />;
             }
             const d = cell.date!;
-            const isSel = `${d.year}-${d.month}-${d.day}` === selKey;
+            const isSel = String(d.day) === selKey;
             return (
               <Pressable
                 key={cell.key}
@@ -73,11 +75,22 @@ export const MiniMonth = memo(function MiniMonthBase({
       ))}
     </View>
   );
+}, (prev, next) => {
+  if (
+    prev.year !== next.year ||
+    prev.month !== next.month ||
+    prev.today !== next.today ||
+    prev.onSelectDay !== next.onSelectDay
+  ) {
+    return false;
+  }
+  const inMonth = (s: BSDate) => s.year === next.year && s.month === next.month;
+  return !inMonth(prev.selected) && !inMonth(next.selected);
 });
 
 const styles = StyleSheet.create({
   wrap: {
-    width: '25%',
+    width: '33.333%',
     alignItems: 'center',
     paddingHorizontal: 4,
     marginBottom: 20,

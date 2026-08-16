@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { GridCell, WEEKDAYS, getMonthGrid, BSDate } from '../utils/nepaliDate';
 import { CalendarEvent } from '../utils/events';
@@ -14,7 +14,7 @@ interface MonthGridProps {
   onSelectDay: (date: BSDate) => void;
 }
 
-export function MonthGrid({
+export const MonthGrid = memo(function MonthGridBase({
   year,
   month,
   today,
@@ -23,7 +23,8 @@ export function MonthGrid({
   compact = false,
   onSelectDay,
 }: MonthGridProps) {
-  const weeks = getMonthGrid(year, month, today);
+  const weeks = useMemo(() => getMonthGrid(year, month, today), [year, month, today]);
+  const dots = useMemo(() => dotsForMonth(year, month, events), [year, month, events]);
 
   return (
     <View>
@@ -47,7 +48,7 @@ export function MonthGrid({
                 cell.date.month === selected.month &&
                 cell.date.day === selected.day
               }
-              dots={dotsForCell(cell, events)}
+              dots={cell.date ? dots[cell.date.day] ?? EMPTY_DOTS : EMPTY_DOTS}
               onPress={onSelectDay}
             />
           ))}
@@ -55,27 +56,50 @@ export function MonthGrid({
       ))}
     </View>
   );
+}, areMonthGridPropsEqual);
+
+function areMonthGridPropsEqual(prev: MonthGridProps, next: MonthGridProps) {
+  if (
+    prev.year !== next.year ||
+    prev.month !== next.month ||
+    prev.compact !== next.compact ||
+    prev.events !== next.events ||
+    prev.today !== next.today ||
+    prev.onSelectDay !== next.onSelectDay
+  ) {
+    return false;
+  }
+  const inMonth = (s: BSDate) => s.year === next.year && s.month === next.month;
+  return !inMonth(prev.selected) && !inMonth(next.selected);
 }
 
-function dotsForCell(
-  cell: GridCell,
+const EMPTY_DOTS: string[] = [];
+
+function dotsForMonth(
+  year: number,
+  month: number,
   events: Record<string, CalendarEvent[]>,
-): string[] {
-  if (!cell.date) {
-    return [];
-  }
-  const key = `${cell.date.year}-${String(cell.date.month).padStart(2, '0')}-${String(
-    cell.date.day,
-  ).padStart(2, '0')}`;
-  const list = events[key] ?? [];
-  const uniqueColors: string[] = [];
-  for (const e of list) {
-    const c = CATEGORY_COLORS[e.category] ?? colors.blue;
-    if (!uniqueColors.includes(c)) {
-      uniqueColors.push(c);
+): Record<number, string[]> {
+  const byDay: Record<number, string[]> = {};
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`;
+  for (const [key, list] of Object.entries(events)) {
+    if (!key.startsWith(prefix)) {
+      continue;
     }
+    const day = Number(key.slice(8, 10));
+    if (Number.isNaN(day)) {
+      continue;
+    }
+    const uniqueColors: string[] = [];
+    for (const e of list) {
+      const c = CATEGORY_COLORS[e.category] ?? colors.blue;
+      if (!uniqueColors.includes(c) && uniqueColors.length < 3) {
+        uniqueColors.push(c);
+      }
+    }
+    byDay[day] = uniqueColors;
   }
-  return uniqueColors.slice(0, 3);
+  return byDay;
 }
 
 interface DayCellProps {
@@ -91,7 +115,6 @@ function DayCell({ cell, compact, isSelected, dots, onPress }: DayCellProps) {
     return <View style={compact ? styles.cellCompact : styles.cell} />;
   }
 
-  const circleSize = compact ? 30 : 36;
   const dotRow = dots.length > 0;
 
   return (
@@ -102,7 +125,7 @@ function DayCell({ cell, compact, isSelected, dots, onPress }: DayCellProps) {
       <View
         style={[
           styles.circle,
-          { width: circleSize, height: circleSize, borderRadius: circleSize / 2 },
+          compact ? CIRCLE_SMALL : CIRCLE_LARGE,
           cell.isToday && styles.todayCircle,
           isSelected && !cell.isToday && styles.selectedCircle,
         ]}
@@ -128,6 +151,9 @@ function DayCell({ cell, compact, isSelected, dots, onPress }: DayCellProps) {
     </Pressable>
   );
 }
+
+const CIRCLE_LARGE = { width: 36, height: 36, borderRadius: 18 };
+const CIRCLE_SMALL = { width: 30, height: 30, borderRadius: 15 };
 
 const styles = StyleSheet.create({
   weekdayRow: {

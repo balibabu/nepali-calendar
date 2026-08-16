@@ -9,6 +9,7 @@ import {
   bsToAd,
   dayFromIndex,
   dayIndex,
+  toKey,
 } from '../utils/nepaliDate';
 import { CATEGORY_COLORS, colors, spacing, typography } from '../theme';
 
@@ -28,10 +29,6 @@ interface DayItem {
 const DAY_HEADER_ESTIMATE = 120;
 const DAY_COUNT = TOTAL_BS_DAYS;
 
-function keyFor(bs: BSDate): string {
-  return `${bs.year}-${String(bs.month).padStart(2, '0')}-${String(bs.day).padStart(2, '0')}`;
-}
-
 export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: DayScrollerProps) {
   const listRef = useRef<FlatList<DayItem>>(null);
   const anchorIdxRef = useRef<number>(-1);
@@ -42,7 +39,7 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
     () =>
       Array.from({ length: DAY_COUNT }, (_, i) => {
         const date = dayFromIndex(i);
-        return { date, key: keyFor(date) };
+        return { date, key: toKey(date) };
       }),
     [],
   );
@@ -66,15 +63,20 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
     });
   }, [anchorIdx]);
 
-  const onScrollEndDrag = () => {
+  const onScrollEnd = useCallback(() => {
     isInternalScrollRef.current = false;
-  };
-
-  const onMomentumScrollEnd = () => {
-    isInternalScrollRef.current = false;
-  };
+  }, []);
 
   const keyExtractor = useCallback((item: DayItem) => item.key, []);
+
+  const getItemLayout = useCallback(
+    (_data: unknown, index: number) => ({
+      length: DAY_HEADER_ESTIMATE,
+      offset: DAY_HEADER_ESTIMATE * index,
+      index,
+    }),
+    [],
+  );
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<{ item: DayItem; index?: number | null }> }) => {
@@ -153,19 +155,15 @@ export function DayScroller({ today, anchor, events, onSelectDay, onDelete }: Da
         keyExtractor={keyExtractor}
         renderItem={renderItem}
         initialScrollIndex={Math.max(0, anchorIdx)}
-        getItemLayout={(_data, index) => ({
-          length: DAY_HEADER_ESTIMATE,
-          offset: DAY_HEADER_ESTIMATE * index,
-          index,
-        })}
+        getItemLayout={getItemLayout}
         initialNumToRender={6}
         maxToRenderPerBatch={8}
         windowSize={5}
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
-        onScrollEndDrag={onScrollEndDrag}
-        onMomentumScrollEnd={onMomentumScrollEnd}
+        onScrollEndDrag={onScrollEnd}
+        onMomentumScrollEnd={onScrollEnd}
         onScrollToIndexFailed={onScrollToIndexFailed}
         contentContainerStyle={styles.listContent}
       />

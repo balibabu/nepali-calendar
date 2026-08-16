@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { StatusBar, StyleSheet } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { CalendarHeader } from './src/components/CalendarHeader';
@@ -15,10 +15,12 @@ import {
   monthFromIndex,
   monthIndex,
 } from './src/utils/nepaliDate';
-import { useEventStore } from './src/utils/events';
+import { Category, useEventStore } from './src/utils/events';
 import { colors } from './src/theme';
 
 type Level = 'months' | 'month' | 'day';
+
+const NO_HIDDEN: Category[] = [];
 
 export default function App() {
   const today = useMemo(() => getTodayBS(), []);
@@ -27,13 +29,28 @@ export default function App() {
   const [anchorMonthIdx, setAnchorMonthIdx] = useState(() =>
     monthIndex(today.year, today.month),
   );
-  const [visibleMonthIdx, setVisibleMonthIdx] = useState(() =>
-    monthIndex(today.year, today.month),
-  );
+  const [monthJump, setMonthJump] = useState(0);
+  const visibleMonthIdxRef = useRef(anchorMonthIdx);
+  const [visibleMonthIdx, setVisibleMonthIdxState] = useState(anchorMonthIdx);
   const [anchorYear, setAnchorYear] = useState(today.year);
-  const [visibleYear, setVisibleYear] = useState(today.year);
+  const visibleYearRef = useRef(today.year);
+  const [visibleYear, setVisibleYearState] = useState(today.year);
   const [addOpen, setAddOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+
+  const setVisibleMonthIdx = useCallback((idx: number) => {
+    if (visibleMonthIdxRef.current !== idx) {
+      visibleMonthIdxRef.current = idx;
+      setVisibleMonthIdxState(idx);
+    }
+  }, []);
+
+  const setVisibleYear = useCallback((year: number) => {
+    if (visibleYearRef.current !== year) {
+      visibleYearRef.current = year;
+      setVisibleYearState(year);
+    }
+  }, []);
 
   const { events, addEvent, deleteEvent, visibleEvents } = useEventStore();
 
@@ -50,13 +67,13 @@ export default function App() {
     setAnchorYear(year);
     setVisibleYear(year);
     setLevel('months');
-  }, []);
+  }, [setVisibleYear]);
 
   const openMonthLevel = useCallback((monthIdx: number) => {
     setAnchorMonthIdx(monthIdx);
     setVisibleMonthIdx(monthIdx);
     setLevel('month');
-  }, []);
+  }, [setVisibleMonthIdx]);
 
   const openMonthLevelForDate = useCallback(
     (date: BSDate) => {
@@ -66,24 +83,18 @@ export default function App() {
       setVisibleMonthIdx(idx);
       setLevel('month');
     },
-    [],
+    [setVisibleMonthIdx],
   );
 
   const goToday = useCallback(() => {
     const idx = monthIndex(today.year, today.month);
     setSelected(today);
     setVisibleYear(today.year);
-    if (level === 'month') {
-      if (idx !== visibleMonthIdx) {
-        setAnchorMonthIdx(idx);
-        setVisibleMonthIdx(idx);
-      }
-    } else {
-      setAnchorMonthIdx(idx);
-      setVisibleMonthIdx(idx);
-      setLevel('month');
-    }
-  }, [today, level, visibleMonthIdx]);
+    setAnchorMonthIdx(idx);
+    setVisibleMonthIdx(idx);
+    setLevel('month');
+    setMonthJump(j => j + 1);
+  }, [today, setVisibleYear, setVisibleMonthIdx]);
 
   const visibleMonth = monthFromIndex(visibleMonthIdx);
 
@@ -133,7 +144,7 @@ export default function App() {
 
         {level === 'month' && (
           <MonthScroller
-            key={`month-${anchorMonthIdx}`}
+            key={`month-${anchorMonthIdx}-${monthJump}`}
             today={today}
             selected={selected}
             events={visibleEvents}
@@ -174,7 +185,7 @@ export default function App() {
         <SearchSheet
           visible={searchOpen}
           events={events}
-          hidden={[]}
+          hidden={NO_HIDDEN}
           onClose={() => setSearchOpen(false)}
           onSelectDate={d => openMonthLevelForDate(d)}
         />

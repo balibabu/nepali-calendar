@@ -31,14 +31,6 @@ export function daysInBSMonth(year: number, month: number): number {
   return months[month - 1];
 }
 
-export function daysInBSYear(year: number): number {
-  const months = yearData[String(year)];
-  if (!months) {
-    throw new Error(`BS year ${year} is out of supported range (1992-2100)`);
-  }
-  return months.reduce((sum, m) => sum + m, 0);
-}
-
 const MONTH_COUNT = (MAX_BS_YEAR - MIN_BS_YEAR + 1) * 12;
 const MONTH_STARTS: number[] = new Array(MONTH_COUNT + 1);
 MONTH_STARTS[0] = 0;
@@ -47,6 +39,15 @@ for (let i = 0; i < MONTH_COUNT; i++) {
   MONTH_STARTS[i + 1] = MONTH_STARTS[i] + daysInBSMonth(year, (i % 12) + 1);
 }
 export const TOTAL_BS_DAYS = MONTH_STARTS[MONTH_COUNT];
+
+export function daysInBSYear(year: number): number {
+  const start = MONTH_STARTS[monthIndex(year, 1)];
+  const end = MONTH_STARTS[monthIndex(year, 12) + 1];
+  if (start === undefined || end === undefined) {
+    throw new Error(`BS year ${year} is out of supported range (1992-2100)`);
+  }
+  return end - start;
+}
 
 export function monthIndex(year: number, month: number): number {
   if (year < MIN_BS_YEAR || year > MAX_BS_YEAR) {
@@ -109,16 +110,17 @@ interface StaticCell {
   weekday: number;
 }
 
-const gridCache = new Map<string, StaticCell[]>();
+const CELL_POOL: (StaticCell[] | undefined)[] = [];
 
 function getStaticCells(year: number, month: number): StaticCell[] {
-  const cacheKey = `${year}-${month}`;
-  const cached = gridCache.get(cacheKey);
+  const idx = monthIndex(year, month);
+  const cached = CELL_POOL[idx];
   if (cached) {
     return cached;
   }
-  const total = daysInBSMonth(year, month);
-  const lead = bsToAd({ year, month, day: 1 }).getUTCDay();
+  const total = MONTH_STARTS[idx + 1] - MONTH_STARTS[idx];
+  const lead =
+    ((ANCHOR_AD_UTC_MS / DAY_MS + (MONTH_STARTS[idx] - ANCHOR_DAY_INDEX) + 4) % 7 + 7) % 7;
   const cells: StaticCell[] = [];
   for (let i = 0; i < lead; i++) {
     cells.push({ key: `blank-${i}`, day: null, weekday: i });
@@ -130,9 +132,18 @@ function getStaticCells(year: number, month: number): StaticCell[] {
   while (cells.length % 7 !== 0) {
     cells.push({ key: `tail-${tail++}`, day: null, weekday: cells.length % 7 });
   }
-  gridCache.set(cacheKey, cells);
+  CELL_POOL[idx] = cells;
   return cells;
 }
+
+const BLANK_CELL: GridCell = {
+  key: 'blank',
+  day: null,
+  weekday: 0,
+  isToday: false,
+  isSaturday: false,
+  isPast: false,
+};
 
 export function getMonthGrid(
   year: number,
@@ -145,14 +156,7 @@ export function getMonthGrid(
 
   const cells: GridCell[] = staticCells.map(c => {
     if (c.day === null) {
-      return {
-        key: c.key,
-        day: null,
-        weekday: c.weekday,
-        isToday: false,
-        isSaturday: false,
-        isPast: false,
-      };
+      return { ...BLANK_CELL, key: c.key, weekday: c.weekday };
     }
     const ord = baseOrd + c.day;
     return {
