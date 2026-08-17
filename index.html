@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bikram Sambat Calendar (iOS Style)</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            iosgray: {
+              300: '#a3a3a3',
+              600: '#525252',
+              800: '#1c1c1e',
+              900: '#121212',
+            },
+            iosred: {
+              500: '#ff3b30',
+              600: '#e5332c',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- jQuery CDN -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+  <style>
+    /* Custom scrollbar styling for dark theme */
+    ::-webkit-scrollbar {
+      width: 0px;
+    }
+    
+
+    /* Hardware acceleration rules for virtualized nodes */
+    .month-card-node {
+      will-change: transform;
+      contain: layout style paint;
+    }
+  </style>
+</head>
+<body class="bg-black text-white font-sans antialiased h-screen w-screen overflow-hidden flex flex-col justify-center items-center">
+
+  <!-- Main Container Centered for Desktop & Mobile -->
+  <div class="w-full max-w-md h-full sm:h-[92vh] flex flex-col bg-black overflow-hidden relative">
+
+    <!-- Sticky iOS Style App Header -->
+    <header class="z-30 bg-black  px-4 py-2 flex items-center justify-between">
+      <div id="btn-back" class="flex items-center gap-1 text-iosred-500 font-medium text-lg cursor-pointer">
+        <span>&lsaquo; 2083</span>
+      </div>
+      <div class="flex items-center gap-4 text-white text-lg">
+        <svg class="w-5 h-5 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+        <svg class="w-5 h-5 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+      </div>
+    </header>
+
+    <!-- Days of Week Sub-header -->
+    <div class="grid grid-cols-7 text-center bg-black py-1.5 px-4 text-xs font-medium text-iosgray-600 z-20 border-b border-iosgray-800">
+      <div>S</div>
+      <div>M</div>
+      <div>T</div>
+      <div>W</div>
+      <div>T</div>
+      <div>F</div>
+      <div>S</div>
+    </div>
+
+    <!-- Infinite Scroll Viewport (Strictly NO scroll-smooth class to prevent boot jumping) -->
+    <div id="scroll-viewport" class="flex-1 overflow-y-auto relative w-full">
+      <!-- Virtual Track Container -->
+      <div id="virtual-track" class="relative w-full"></div>
+    </div>
+
+    <!-- Bottom Toolbar -->
+    <footer class="z-30 bg-black border-t border-iosgray-800 px-4 py-3 flex items-center justify-start">
+      <button id="btn-today" class="text-iosred-500 font-medium text-lg cursor-pointer">
+        Today
+      </button>
+    </footer>
+
+  </div>
+
+  <!-- JavaScript Architecture -->
+   <script src="miti.js"></script>
+
+  <script>
+    /**
+     * =========================================================================
+     * 1. DATA STORE MODULE (BS Dataset & Configuration)
+     * =========================================================================
+     */
+    const CalendarDataStore = {
+      // Anchor Reference: Poush 17, 2056 BS = January 1, 2000 AD (Saturday)
+      ANCHOR: {
+        bsYear: 2056,
+        bsMonthIndex: 8, // Poush (0-indexed: Baishakh=0, Poush=8)
+        bsDay: 17,
+        adDate: new Date(Date.UTC(2000, 0, 1)) // 2000-01-01 UTC
+      },
+
+      MONTH_NAMES_BS: ["Baishakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashwin", "Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra"],
+
+      getMitiData() {
+        for (let y = 1992; y <= 2100; y++) {
+          if (!miti[y]) {
+            const isLeapLike = (y % 4 === 0);
+            miti[y] = [
+              31, 31 + (y % 3 === 0 ? 1 : 0), 31, 32, 31, 31, 
+              30, 29 + (isLeapLike ? 1 : 0), 30, 29 + (isLeapLike ? 1 : 0), 30, 30
+            ];
+          }
+        }
+        return miti;
+      }
+    };
+
+    /**
+     * =========================================================================
+     * 2. EXTENSIBLE EVENT PROVIDER PLUGIN
+     * =========================================================================
+     */
+    class EventProvider {
+      getDayMetaData(bsYear, bsMonthIndex, bsDay, adDate) {
+        const isSaturday = adDate.getUTCDay() === 6;
+        return {
+          tithi: null,
+          isHoliday: isSaturday,
+          holidayName: isSaturday ? "Saturday" : null,
+          events: []
+        };
+      }
+    }
+
+    /**
+     * =========================================================================
+     * 3. DATE ENGINE MODULE
+     * =========================================================================
+     */
+    class DateEngine {
+      constructor() {
+        this.miti = CalendarDataStore.getMitiData();
+        this.startYear = 1992;
+        this.endYear = 2100;
+        this.monthStartOffsets = [];
+        this.monthMeta = [];
+        
+        this._initializeOffsets();
+      }
+
+      _initializeOffsets() {
+        const anchor = CalendarDataStore.ANCHOR;
+        const anchorGlobalMonthIndex = (anchor.bsYear - this.startYear) * 12 + anchor.bsMonthIndex;
+
+        let totalMonths = (this.endYear - this.startYear + 1) * 12;
+        this.monthStartOffsets = new Array(totalMonths);
+        this.monthMeta = new Array(totalMonths);
+
+        this.monthStartOffsets[anchorGlobalMonthIndex] = -16;
+
+        for (let i = anchorGlobalMonthIndex; i < totalMonths - 1; i++) {
+          const yr = this.startYear + Math.floor(i / 12);
+          const mIdx = i % 12;
+          const daysInMonth = this.miti[yr][mIdx];
+          this.monthStartOffsets[i + 1] = this.monthStartOffsets[i] + daysInMonth;
+        }
+
+        for (let i = anchorGlobalMonthIndex - 1; i >= 0; i--) {
+          const yr = this.startYear + Math.floor(i / 12);
+          const mIdx = i % 12;
+          const daysInMonth = this.miti[yr][mIdx];
+          this.monthStartOffsets[i] = this.monthStartOffsets[i + 1] - daysInMonth;
+        }
+
+        for (let i = 0; i < totalMonths; i++) {
+          const year = this.startYear + Math.floor(i / 12);
+          const monthIndex = i % 12;
+          const totalDays = this.miti[year][monthIndex];
+          const offsetFromAnchor = this.monthStartOffsets[i];
+
+          const startDayOfWeek = ((6 + (offsetFromAnchor % 7)) % 7 + 7) % 7;
+          const startAdDate = new Date(CalendarDataStore.ANCHOR.adDate.getTime() + offsetFromAnchor * 86400000);
+          const endAdDate = new Date(startAdDate.getTime() + (totalDays - 1) * 86400000);
+
+          const numRows = Math.ceil((startDayOfWeek + totalDays) / 7);
+
+          this.monthMeta[i] = {
+            globalIndex: i,
+            year,
+            monthIndex,
+            totalDays,
+            startDayOfWeek,
+            numRows,
+            startAdDate,
+            endAdDate
+          };
+        }
+      }
+
+      getMonthMeta(globalIndex) {
+        return this.monthMeta[globalIndex];
+      }
+
+      adToBs(adDate) {
+        const utcAd = Date.UTC(adDate.getFullYear(), adDate.getMonth(), adDate.getDate());
+        const anchorUtc = CalendarDataStore.ANCHOR.adDate.getTime();
+        const diffDays = Math.floor((utcAd - anchorUtc) / 86400000);
+
+        let low = 0, high = this.monthStartOffsets.length - 1;
+        let foundMonthIndex = 0;
+
+        while (low <= high) {
+          let mid = (low + high) >> 1;
+          if (this.monthStartOffsets[mid] <= diffDays) {
+            foundMonthIndex = mid;
+            low = mid + 1;
+          } else {
+            high = mid - 1;
+          }
+        }
+
+        const meta = this.monthMeta[foundMonthIndex];
+        const day = diffDays - this.monthStartOffsets[foundMonthIndex] + 1;
+
+        return {
+          globalMonthIndex: foundMonthIndex,
+          bsYear: meta.year,
+          bsMonthIndex: meta.monthIndex,
+          bsDay: day
+        };
+      }
+    }
+
+    /**
+     * =========================================================================
+     * 4. VIRTUAL SCROLL RENDER ENGINE
+     * =========================================================================
+     */
+    class VirtualScrollEngine {
+      constructor($viewport, $track, dateEngine, eventProvider, onHeaderUpdate, initialMonthIndex) {
+        this.$viewport = $viewport;
+        this.$track = $track;
+        this.dateEngine = dateEngine;
+        this.eventProvider = eventProvider;
+        this.onHeaderUpdate = onHeaderUpdate;
+
+        this.POOL_SIZE = 6;
+        
+        // Pixel dimensions matching iOS layout
+        this.MONTH_HEADER_HEIGHT = 44;
+        this.MONTH_HEADER_PADDING_Y = 16;
+        this.CELL_HEIGHT = 40;
+        this.MONTH_MARGIN_TOP = 20;
+
+        this.monthPositions = [];
+        this.totalTrackHeight = 0;
+        this.poolNodes = [];
+        this.isTicking = false;
+
+        this._calculateLayoutPositions();
+        this._createDOMPool();
+
+        // Direct instant positioning BEFORE event binding or first render pass
+        if (initialMonthIndex !== undefined) {
+          const initialTop = this.monthPositions[initialMonthIndex]?.top || 0;
+          this.$viewport[0].scrollTop = initialTop;
+        }
+
+        this._bindScrollEvent();
+        this.render(); // Initial render pass
+      }
+
+      _calculateLayoutPositions() {
+        let currentY = this.MONTH_MARGIN_TOP;
+        const totalMonths = this.dateEngine.monthMeta.length;
+        this.monthPositions = new Array(totalMonths);
+
+        for (let i = 0; i < totalMonths; i++) {
+          const meta = this.dateEngine.monthMeta[i];
+          const gridHeight = meta.numRows * this.CELL_HEIGHT;
+          const cardHeight = this.MONTH_HEADER_HEIGHT + (this.MONTH_HEADER_PADDING_Y * 2) + gridHeight;
+          
+          this.monthPositions[i] = {
+            top: currentY,
+            height: cardHeight,
+            bottom: currentY + cardHeight
+          };
+
+          currentY += cardHeight + this.MONTH_MARGIN_TOP;
+        }
+
+        this.totalTrackHeight = currentY;
+        this.$track.css('height', `${this.totalTrackHeight}px`);
+      }
+
+      _createDOMPool() {
+        this.$track.empty();
+        this.poolNodes = [];
+
+        for (let i = 0; i < this.POOL_SIZE; i++) {
+          const $card = $(`
+            <div class="month-card-node absolute left-0 right-0 mx-auto w-full max-w-full bg-black overflow-hidden px-4">
+              <div class="month-card-header flex items-center justify-start py-4 h-[44px]">
+                <span class="bs-title font-medium text-[28px] text-white"></span>
+              </div>
+              <div class="days-grid grid grid-cols-7 gap-0"></div>
+            </div>
+          `);
+
+          this.$track.append($card);
+          this.poolNodes.push({
+            $el: $card,
+            assignedGlobalIndex: -1
+          });
+        }
+      }
+
+      _bindScrollEvent() {
+        this.$viewport.on('scroll', () => {
+          if (!this.isTicking) {
+            requestAnimationFrame(() => {
+              this.render();
+              this.isTicking = false;
+            });
+            this.isTicking = true;
+          }
+        });
+      }
+
+      render() {
+        const scrollTop = this.$viewport.scrollTop();
+
+        let startIdx = 0, endIdx = this.monthPositions.length - 1;
+        let topVisibleIdx = 0;
+
+        while (startIdx <= endIdx) {
+          let mid = (startIdx + endIdx) >> 1;
+          if (this.monthPositions[mid].bottom >= scrollTop) {
+            topVisibleIdx = mid;
+            endIdx = mid - 1;
+          } else {
+            startIdx = mid + 1;
+          }
+        }
+
+        const renderStartIdx = Math.max(0, topVisibleIdx - 1);
+        const renderEndIdx = Math.min(this.monthPositions.length - 1, renderStartIdx + this.POOL_SIZE - 1);
+
+        const activeMeta = this.dateEngine.getMonthMeta(topVisibleIdx);
+        this.onHeaderUpdate(activeMeta);
+
+        for (let i = renderStartIdx; i <= renderEndIdx; i++) {
+          const poolNodeIndex = i % this.POOL_SIZE;
+          const node = this.poolNodes[poolNodeIndex];
+
+          if (node.assignedGlobalIndex !== i) {
+            this._populateMonthCard(node.$el, i);
+            node.assignedGlobalIndex = i;
+          }
+
+          const posY = this.monthPositions[i].top;
+          node.$el.css('transform', `translate3d(0, ${posY}px, 0)`);
+        }
+      }
+
+      _populateMonthCard($card, globalMonthIndex) {
+        const meta = this.dateEngine.getMonthMeta(globalMonthIndex);
+        const bsMonthName = CalendarDataStore.MONTH_NAMES_BS[meta.monthIndex];
+        
+        $card.find('.bs-title').text(bsMonthName);
+
+        const $grid = $card.find('.days-grid');
+        $grid.empty();
+
+        // 1. Empty Leading Cells
+        for (let e = 0; e < meta.startDayOfWeek; e++) {
+          $grid.append('<div class="h-10"></div>');
+        }
+
+        const todayBs = this.dateEngine.adToBs(new Date());
+
+        // 2. Render Month Days
+        for (let day = 1; day <= meta.totalDays; day++) {
+          const currentAdDate = new Date(meta.startAdDate.getTime() + (day - 1) * 86400000);
+          
+          const eventInfo = this.eventProvider.getDayMetaData(meta.year, meta.monthIndex, day, currentAdDate);
+          const isToday = (meta.year === todayBs.bsYear && meta.monthIndex === todayBs.bsMonthIndex && day === todayBs.bsDay);
+
+          let cellClass = "relative h-10 flex flex-col items-center justify-center select-none text-white";
+          let circleClass = "";
+          let numberClass = "";
+
+          if (isToday) {
+            circleClass = "absolute inset-0 m-auto aspect-square h-[30px] rounded-full bg-iosred-500 z-0";
+            numberClass = "text-white font-medium"; 
+          } else if (eventInfo.isHoliday) {
+            numberClass = "text-iosred-600 font-medium"; 
+          }
+
+          const $cell = $(`
+            <div class="${cellClass}">
+              <div class="${circleClass}"></div>
+              <span class="text-[17px] z-10 ${numberClass}">${day}</span>
+            </div>
+          `);
+
+          $grid.append($cell);
+        }
+      }
+
+      scrollToMonth(globalMonthIndex) {
+        if (this.monthPositions[globalMonthIndex]) {
+          const targetY = this.monthPositions[globalMonthIndex].top;
+          // Direct pixel assignment for instant jump
+          this.$viewport[0].scrollTop = targetY;
+          this.render();
+        }
+      }
+    }
+
+    /**
+     * =========================================================================
+     * 5. APPLICATION UI CONTROLLER
+     * =========================================================================
+     */
+    $(document).ready(() => {
+      const dateEngine = new DateEngine();
+      const eventProvider = new EventProvider();
+
+      const $viewport = $('#scroll-viewport');
+      const $track = $('#virtual-track');
+      const $stickyBackBtn = $('#btn-back span');
+
+      const onHeaderUpdate = (meta) => {
+        $stickyBackBtn.html(`&lsaquo; ${meta.year}`);
+      };
+
+      // Calculate today's month index BEFORE initializing Virtual Scroll
+      const todayInfo = dateEngine.adToBs(new Date());
+
+      // Pass today's index into the constructor so scrollTop is set instantly before rendering
+      const scrollEngine = new VirtualScrollEngine($viewport, $track, dateEngine, eventProvider, onHeaderUpdate, todayInfo.globalMonthIndex);
+
+      // Today button action
+      $('#btn-today').on('click', () => {
+        const nowBs = dateEngine.adToBs(new Date());
+        scrollEngine.scrollToMonth(nowBs.globalMonthIndex);
+      });
+    });
+  </script>
+</body>
+</html>
